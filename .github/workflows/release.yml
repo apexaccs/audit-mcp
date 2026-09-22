@@ -1,0 +1,34 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install and build
+        run: npm install && npm run build
+
+      - name: Pack tarball
+        run: |
+          cp -r dist package.json README.md /tmp/apex-audit-pack/
+          cd /tmp && mkdir -p apex-audit-pack
+          cp -r /tmp/apex-audit-pack . 2>/dev/null || true
+          npm pack --pack-destination /tmp/
+          mv /tmp/*.tgz apex-audit-mcp.tgz
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: apex-audit-mcp.tgz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
