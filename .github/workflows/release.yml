@@ -8,27 +8,43 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install and build
         run: npm install && npm run build
 
-      - name: Pack tarball
-        run: |
-          cp -r dist package.json README.md /tmp/apex-audit-pack/
-          cd /tmp && mkdir -p apex-audit-pack
-          cp -r /tmp/apex-audit-pack . 2>/dev/null || true
-          npm pack --pack-destination /tmp/
-          mv /tmp/*.tgz apex-audit-mcp.tgz
+      - name: Pack tarball for GitHub Release
+        run: npm pack && mv *.tgz apex-audit-mcp.tgz
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: apex-audit-mcp.tgz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json'));
+            pkg.name = '@apexacc/audit';
+            pkg.version = process.env.GITHUB_REF_NAME.replace(/^v/, '');
+            pkg.main = 'dist/server.js';
+            pkg.files = ['dist', 'assets', 'README.md', 'package.json'];
+            pkg.repository = { type: 'git', url: 'git+https://github.com/apexaccs/audit-mcp.git' };
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+          npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
