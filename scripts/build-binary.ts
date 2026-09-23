@@ -13,6 +13,8 @@ async function run(cmd: string[], cwd = dir) {
 }
 
 const target = Bun.env.CROSS_TARGET
+const isWinTarget = target === 'windows-x64'
+
 const bunTarget = target === 'windows-x64'
   ? 'bun-windows-x64-baseline'
   : target === 'darwin-arm64'
@@ -21,7 +23,8 @@ const bunTarget = target === 'windows-x64'
       ? 'bun-darwin-x64'
       : undefined
 
-const outName = target ? `apex-audit-${target}` : 'apex-audit'
+const outBaseName = target ? `apex-audit-${target}` : 'apex-audit'
+const outName = isWinTarget ? `${outBaseName}.exe` : outBaseName
 
 console.log(`Building: ${outName} target=${bunTarget ?? 'native'}`)
 
