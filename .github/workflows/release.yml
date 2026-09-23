@@ -44,24 +44,21 @@ jobs:
           CROSS_TARGET: ${{ matrix.target }}
         run: bun scripts/build-binary.ts
 
-      - name: List dist
-        shell: bash
-        run: ls -la dist/
-
-      - name: Rename artifact
+      - name: Ensure artifact name
         shell: bash
         run: |
           cd dist
           ls -la
           for f in apex-audit-${{ matrix.target }} apex-audit-${{ matrix.target }}.exe apex-audit apex-audit.exe; do
-            if [ -f "$f" ]; then
-              echo "Found: $f"
+            if [ -f "$f" ] && [ "$f" != "${{ matrix.asset_name }}" ]; then
               cp "$f" "${{ matrix.asset_name }}"
-              echo "Copied to ${{ matrix.asset_name }}"
+              echo "Copied $f -> ${{ matrix.asset_name }}"
+              break
+            elif [ -f "$f" ] && [ "$f" = "${{ matrix.asset_name }}" ]; then
+              echo "Already named correctly: $f"
               break
             fi
           done
-          ls -la
 
       - name: Build apex-audit-verify (macOS only)
         if: runner.os == 'macOS'
