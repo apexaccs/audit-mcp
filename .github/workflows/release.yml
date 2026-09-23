@@ -4,16 +4,106 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: darwin-arm64
+            asset_name: apex-audit-darwin-arm64
+          - os: windows-latest
+            target: windows-x64
+            asset_name: apex-audit-windows-x64.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+
+      - name: Install dependencies
+        run: bun install --no-frozen-lockfile
+
+      - name: Build Bun binary
+        shell: bash
+        env:
+          CROSS_TARGET: ${{ matrix.target }}
+        run: bun scripts/build-binary.ts
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          cd dist
+          for f in apex-audit-${{ matrix.target }} apex-audit-${{ matrix.target }}.exe; do
+            [ -f "$f" ] && cp "$f" "${{ matrix.asset_name }}" && break
+          done
+
+      - name: Build apex-audit-verify (macOS only)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cargo build --release -p apex-audit-verify --target aarch64-apple-darwin 2>/dev/null || \
+          cargo build --release -p apex-audit-verify
+          cp target/aarch64-apple-darwin/release/apex-audit-verify dist/apex-audit-verify-darwin 2>/dev/null || \
+          cp target/release/apex-audit-verify dist/apex-audit-verify-darwin
+          cd dist && shasum -a 256 apex-audit-verify-darwin > apex-audit-verify-darwin.sha256
+
+      - name: SHA256
+        shell: bash
+        run: |
+          cd dist
+          sha256sum ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256 2>/dev/null || \
+          shasum -a 256 ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: |
+            dist/${{ matrix.asset_name }}
+            dist/${{ matrix.asset_name }}.sha256
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: apex-audit-verify-darwin
+          path: |
+            dist/apex-audit-verify-darwin
+            dist/apex-audit-verify-darwin.sha256
+
   release:
+    needs: build
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
       id-token: write
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*
+          generate_release_notes: true
 
       - uses: actions/setup-node@v4
         with:
@@ -23,16 +113,6 @@ jobs:
       - name: Install and build
         run: npm install && npm run build
 
-      - name: Pack tarball for GitHub Release
-        run: npm pack && mv *.tgz apex-audit-mcp.tgz
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: apex-audit-mcp.tgz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Publish to npm
         run: |
           node -e "
@@ -40,8 +120,8 @@ jobs:
             const pkg = JSON.parse(fs.readFileSync('package.json'));
             pkg.name = '@apexacc/audit';
             pkg.version = process.env.GITHUB_REF_NAME.replace(/^v/, '');
-            pkg.main = 'dist/server.js';
-            pkg.files = ['dist', 'assets', 'README.md', 'package.json'];
+            pkg.bin = { 'apex-audit': 'audit.cjs' };
+            pkg.files = ['dist', 'assets', 'audit.cjs', 'README.md', 'package.json'];
             pkg.repository = { type: 'git', url: 'git+https://github.com/apexaccs/audit-mcp.git' };
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "

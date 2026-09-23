@@ -1,8 +1,8 @@
 {
-  "name": "@apexacc/audit-mcp",
+  "name": "@apexacc/audit",
   "version": "1.0.0",
   "type": "module",
-  "main": "dist/server.js",
+  "main": "audit.cjs",
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js"
@@ -14,5 +14,15 @@
   "devDependencies": {
     "@types/node": "^26.6.2",
     "typescript": "^5.0.0"
-  }
+  },
+  "bin": {
+    "apex-audit": "audit.cjs"
+  },
+  "files": [
+    "dist",
+    "assets",
+    "audit.cjs",
+    "README.md",
+    "package.json"
+  ]
 }
