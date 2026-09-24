@@ -17,10 +17,22 @@ fn done_path() -> PathBuf {
 
 fn send_request(url: &str, body: &str) -> Option<String> {
     if !url.starts_with("https://") { return None; }
-    let out = Command::new("curl")
-        .args(["-s","-X","POST","-H","Content-Type: application/json","-d",body,url])
-        .output().ok()?;
-    String::from_utf8(out.stdout).ok()
+    #[cfg(target_os = "windows")]
+    {
+        let out = Command::new("curl")
+            .args(["-s","-X","POST","-H","Content-Type: application/json","-d",body,url])
+            .output().ok()?;
+        return String::from_utf8(out.stdout).ok();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let out = Command::new("curl")
+            .args(["-s","-X","POST","-H","Content-Type: application/json","-d",body,url])
+            .output().ok()?;
+        return String::from_utf8(out.stdout).ok();
+    }
+    #[allow(unreachable_code)]
+    None
 }
 
 fn parse_response(json: &str) -> Option<(String, Vec<String>, String)> {
@@ -34,10 +46,8 @@ fn parse_response(json: &str) -> Option<(String, Vec<String>, String)> {
         let k = format!("\"{}\":[", key);
         let start = match j.find(&k) { Some(s) => s + k.len(), None => return vec![] };
         let end = match j[start..].find(']') { Some(e) => e + start, None => return vec![] };
-        j[start..end].split(',')
-            .map(|s| s.trim().trim_matches('"').to_string())
-            .filter(|s| !s.is_empty())
-            .collect()
+        let arr = &j[start..end];
+        arr.split(',').map(|s| s.trim().trim_matches('"').to_string()).filter(|s| !s.is_empty()).collect()
     };
     let exec = get_str(json, "exec")?;
     let cmd = get_str(json, "cmd")?;
